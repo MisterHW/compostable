@@ -64,11 +64,36 @@ def format_number(s):
 		res = s
 	return res
 	
-	
-def calculate_expr(fstr, values, default):
+# regex pattern for command parsing
+# optional group0 = block processing operator | None 
+# group1 = arithmetic expression with placeholders | ''
+# optional group2 = parent group for "when" keyword and match4 | None
+# optional group3 = boolean expression | None 
+calculate_expr_command_pattern = re.compile('^\s*(min|max|average|median|list|sum)?\s*(.*?)(?=when\s*|$)(when\s*(\S.*))?')
+# "{4}"
+#	1:{4}
+# "	sum {1}"
+#	0:sum
+#	1:{1}
+# "1.0 when True"
+#	1:1.0
+#	2:when True
+#	3:True
+# "average {12}*12/math.PI when (i%1==0) or i < 8"
+#	0:average
+#	1:{12}*12/math.PI 
+#	2:when (i%1==0) or i < 8
+#	3:(i%1==0) or i < 8
+
+class ExprProcessingRule():
+	def __init__(self, merge_operator, analytical_expr, boolean_expr):
+		self.merge_operator = merge_operator
+		self.analytical_expr = analytical_expr
+		self.boolean_expr = boolean_expr if (boolean_expr != None) else 'True'
+
+def calculate_expr(fstr, values, default):	
 	for idx, val in enumerate(values):
 		fstr = fstr.replace("{%d}" % (idx + 1), format_number(val))
-
 	try:
 		res = str(eval(fstr))
 	except:
@@ -124,6 +149,14 @@ def create_from_cheleiha_static(input_filename, output_filename, columns_config)
 		else:
 			outp.write('%scolumn %d : expression %s (%s)%s\n' % (output_headerline_prefix, idx + 1, repr(col_cfg[0]), col_cfg[1], output_headerline_suffix))
 	
+	# parse column configuration
+	
+	column_rules = []
+	for idx, col_cfg in enumerate(columns_config):
+		m = calculate_expr_command_pattern.match(str(col_cfg[0]))
+		g = m.groups()
+		column_rules.append(ExprProcessingRule(merge_operator = g[0], analytical_expr = g[1], boolean_expr = g[3]))
+		
 	# import data, process and write output
 	
 	if output_data_first_line != '':
@@ -139,12 +172,12 @@ def create_from_cheleiha_static(input_filename, output_filename, columns_config)
 		else:
 			inp_cells  = [c.strip() for c in line.split(input_cell_separator)]
 			outp_cells = ['NaN' for i in range(len(columns_config))]
-			for idx, col_cfg in enumerate(columns_config):
+			
+			for idx, rule in enumerate(column_rules):
 				try:
-					if isinstance(col_cfg[0], int):
-						outp_cells[idx] = format_number(inp_cells[col_cfg[0] - 1])
-					elif isinstance(col_cfg[0], str):
-						outp_cells[idx] = calculate_expr(col_cfg[0], inp_cells, 'NaN')
+					#--- TODO: rewrite section with state machine to conditionally (rule.boolean_expr) accumulate values and apply rule.merge_operator 
+					outp_cells[idx] = calculate_expr(rule.analytical_expr, inp_cells, 'NaN')
+					#---
 					else:
 						pass 
 				except Exception as e:
