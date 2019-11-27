@@ -27,7 +27,6 @@ print("output: %s" % output_fn)
 # note: other functions are also supported, like math.sin() 
 #	and in-built functions (see compose.py code).
 
-print("output: %s" % output_fn)
 columns = [
 	("{3}-14", "T_case k-type TC"),
 	("RTD({11}/0.001, 1000)", "CH8 HS V(PT1000@1mA)"),

@@ -53,7 +53,6 @@ def RTD(R, R0):
 
 ##################################################################	
 
-
 def format_number(s):
 	res = None 
 	try:
@@ -64,33 +63,7 @@ def format_number(s):
 		res = s
 	return res
 	
-# regex pattern for command parsing
-# optional group0 = block processing operator | None 
-# group1 = arithmetic expression with placeholders | ''
-# optional group2 = parent group for "when" keyword and match4 | None
-# optional group3 = boolean expression | None 
-calculate_expr_command_pattern = re.compile('^\s*(min|max|average|median|list|sum)?\s*(.*?)(?=when\s*|$)(when\s*(\S.*))?')
-# "{4}"
-#	1:{4}
-# "	sum {1}"
-#	0:sum
-#	1:{1}
-# "1.0 when True"
-#	1:1.0
-#	2:when True
-#	3:True
-# "average {12}*12/math.PI when (i%1==0) or i < 8"
-#	0:average
-#	1:{12}*12/math.PI 
-#	2:when (i%1==0) or i < 8
-#	3:(i%1==0) or i < 8
-
-class ExprProcessingRule():
-	def __init__(self, merge_operator, analytical_expr, boolean_expr):
-		self.merge_operator = merge_operator
-		self.analytical_expr = analytical_expr
-		self.boolean_expr = boolean_expr if (boolean_expr != None) else 'True'
-
+	
 def calculate_expr(fstr, values, default):	
 	for idx, val in enumerate(values):
 		fstr = fstr.replace("{%d}" % (idx + 1), format_number(val))
@@ -102,7 +75,113 @@ def calculate_expr(fstr, values, default):
 	return res
 	
 
-def create_from_cheleiha_static(input_filename, output_filename, columns_config):
+class ExprProcessingRule():
+	def __init__(self, merge_operator, analytical_expr, boolean_expr):
+		self.merge_operator  = merge_operator
+		self.analytical_expr = analytical_expr
+		self.boolean_expr    = boolean_expr if (boolean_expr != None) else 'True'
+		
+	
+class IterativeTableProcessor():
+	def __init__(self, column_configurations, block_length):
+		self.block_length = block_length
+		self.line_counter = 0
+		self.relative_counter = 0
+		self.column_configurations = column_configurations
+		# regex pattern for command parsing
+		# optional group0 = block processing operator | None 
+		# group1 = arithmetic expression with placeholders | ''
+		# optional group2 = parent group for "when" keyword and match4 | None
+		# optional group3 = boolean expression | None 
+		self.command_pattern = re.compile('^\s*(min|max|average|median|list|sum)?\s*(.*?)(?=when\s*|$)(when\s*(\S.*))?')
+		# examples:
+		# "{4}"
+		#	1:{4}
+		#	"	sum {1}"
+		#	0:sum
+		#	1:{1}
+		# "1.0 when True"
+		#	1:1.0
+		#	2:when True
+		#	3:True
+		# "average {12}*12/math.PI when (i%1==0) or i < 8"
+		#	0:average
+		#	1:{12}*12/math.PI 
+		#	2:when (i%1==0) or i < 8
+		#	3:(i%1==0) or i < 8
+		
+		# parse column configuration
+		self.column_rules = []
+		for idx, col_cfg in enumerate(self.column_configurations):
+			m = self.command_pattern.match(str(col_cfg[0]))
+			g = m.groups()
+			self.column_rules.append(ExprProcessingRule(merge_operator = g[0], analytical_expr = g[1], boolean_expr = g[3]))
+			
+		self._clear_output_cells()
+			
+	def _clear_output_cells(self):
+		self.outp_cells = [[] for i in range(len(self.column_configurations))]
+		self.relative_counter = 0
+		
+	def merged_by_rules(self):
+		if (self.relative_counter == 0) or (sum(map(len, self.outp_cells)) == 0):
+			return None
+		else:	
+			res = ['NaN' for i in range(len(self.column_rules))]	
+			for idx, rule in enumerate(self.column_rules):
+				# operators listed in self.command_pattern
+				if rule.merge_operator == None:
+					# select first item (default)
+					if len(self.outp_cells[idx]) > 0:
+						res[idx] = self.outp_cells[idx][0]
+						if self.block_length > 1:
+							print("Warning: column %d has no explicit selection operator and block length is > 1.")
+							print("Per block, only the first item from each column will be output.")
+				if rule.merge_operator == 'min':
+					# TODO
+					continue 
+				elif rule.merge_operator == 'max':
+					# TODO
+					continue
+				elif rule.merge_operator == 'average':
+					if len(self.outp_cells[idx]) > 0:
+						res[idx] = sum(map(float, self.outp_cells[idx])) / len(self.outp_cells[idx])
+				elif rule.merge_operator == 'median':
+					# TODO
+					continue
+				elif rule.merge_operator == 'list':
+					res[idx] = "[%s]" % "; ".join(self.outp_cells[idx])
+				elif rule.merge_operator == 'sum':
+					res[idx] = sum(map(float, self.outp_cells[idx]))
+		return res
+
+	def process_line(self, line_cells):
+		self.line_counter = self.line_counter + 1
+		self.relative_counter = self.relative_counter + 1		
+		for idx, rule in enumerate(self.column_rules):
+			try:
+				# conditionally (rule.boolean_expr) accumulate values and apply rule.merge_operator.
+				# using calculate_expr() allows "1", "True" and functions, e.g. '{1}/{2} < 4.5' 
+				# to be evaluated as powerful conditional selections.
+				if calculate_expr(rule.boolean_expr + " == True", line_cells, "False") == "True":
+					self.outp_cells[idx].append(calculate_expr(rule.analytical_expr, line_cells, 'NaN'))
+			except Exception as e:
+				print(e)
+				# default is 'NaN'
+				pass
+				
+		if self.relative_counter >= self.block_length:
+			res = self.merged_by_rules()
+			self._clear_output_cells()
+			return res
+		else:
+			return None
+		
+	def process_eof(self):
+		return self.merged_by_rules()
+		
+			
+def create_from_cheleiha_static(input_filename, output_filename, columns_config, block_length = 1):
 	# input format-specific definitions
 	
 	last_headerline_pattern = re.compile('--Nr\.--.*')
@@ -148,43 +227,36 @@ def create_from_cheleiha_static(input_filename, output_filename, columns_config)
 			outp.write('%scolumn %d : original column %s (%s)%s\n' % (output_headerline_prefix, idx + 1, col_cfg[0], col_cfg[1], output_headerline_suffix))
 		else:
 			outp.write('%scolumn %d : expression %s (%s)%s\n' % (output_headerline_prefix, idx + 1, repr(col_cfg[0]), col_cfg[1], output_headerline_suffix))
-	
-	# parse column configuration
-	
-	column_rules = []
-	for idx, col_cfg in enumerate(columns_config):
-		m = calculate_expr_command_pattern.match(str(col_cfg[0]))
-		g = m.groups()
-		column_rules.append(ExprProcessingRule(merge_operator = g[0], analytical_expr = g[1], boolean_expr = g[3]))
 		
 	# import data, process and write output
+	
+	ITP = IterativeTableProcessor(columns_config, block_length)
 	
 	if output_data_first_line != '':
 		outp.write('%s\n' % (output_data_first_line))
 		
 	input_is_header = True
+	data_line_index = 0
 	
 	for line in inp:
 		if input_is_header:
 			if last_headerline_pattern.match(line):
 				input_is_header = False
+				data_line_index = 0
 				continue
 		else:
 			inp_cells  = [c.strip() for c in line.split(input_cell_separator)]
-			outp_cells = ['NaN' for i in range(len(columns_config))]
+			outp_cells = ITP.process_line(inp_cells)
+			if outp_cells != None:
+				outp.write('%s\n' % (output_cell_separator.join(outp_cells)))
 			
-			for idx, rule in enumerate(column_rules):
-				try:
-					#--- TODO: rewrite section with state machine to conditionally (rule.boolean_expr) accumulate values and apply rule.merge_operator 
-					outp_cells[idx] = calculate_expr(rule.analytical_expr, inp_cells, 'NaN')
-					#---
-					else:
-						pass 
-				except Exception as e:
-					print(e)
-					# default is 'NaN'
-					pass
-			outp.write('%s\n' % (output_cell_separator.join(outp_cells)))
+	outp_cells = ITP.process_eof()
+	if outp_cells != None:
+		outp.write('%s\n' % (output_cell_separator.join(outp_cells)))
+			
 	inp.close()
 	outp.close()
 	return True 
+
+
+
