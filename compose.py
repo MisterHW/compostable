@@ -64,10 +64,13 @@ def format_number(s):
 	return res
 	
 	
-def calculate_expr(fstr, values, default):	
+def calculate_expr(fstr, values, default, symbols = {}):	
 	for idx, val in enumerate(values):
 		fstr = fstr.replace("{%d}" % (idx + 1), format_number(val))
+	for key, val in symbols.items():
+		fstr = fstr.replace(key, val)
 	try:
+		print(fstr)
 		res = str(eval(fstr))
 	except:
 		res = default
@@ -129,43 +132,51 @@ class IterativeTableProcessor():
 		else:	
 			res = ['NaN' for i in range(len(self.column_rules))]	
 			for idx, rule in enumerate(self.column_rules):
-				# operators listed in self.command_pattern
-				if rule.merge_operator == None:
-					# select first item (default)
-					if len(self.outp_cells[idx]) > 0:
-						res[idx] = self.outp_cells[idx][0]
-						if self.block_length > 1:
-							print("Warning: column %d has no explicit selection operator and block length is > 1.")
-							print("Per block, only the first item from each column will be output.")
-				if rule.merge_operator == 'min':
-					# TODO
-					continue 
-				elif rule.merge_operator == 'max':
-					# TODO
-					continue
-				elif rule.merge_operator == 'average':
-					if len(self.outp_cells[idx]) > 0:
-						res[idx] = sum(map(float, self.outp_cells[idx])) / len(self.outp_cells[idx])
-				elif rule.merge_operator == 'median':
-					# TODO
-					continue
-				elif rule.merge_operator == 'list':
-					res[idx] = "[%s]" % "; ".join(self.outp_cells[idx])
-				elif rule.merge_operator == 'sum':
-					res[idx] = sum(map(float, self.outp_cells[idx]))
+				try:
+					# operators listed in self.command_pattern
+					if rule.merge_operator == None:
+						# select first item (default)
+						if len(self.outp_cells[idx]) > 0:
+							res[idx] = str(self.outp_cells[idx][0])
+							if self.block_length > 1:
+								print("Warning: column %d has no explicit selection operator and block length is > 1.")
+								print("Per block, only the first item from each column will be output.")
+					if rule.merge_operator == 'min':
+						# TODO
+						continue 
+					elif rule.merge_operator == 'max':
+						# TODO
+						continue
+					elif rule.merge_operator == 'average':
+						if len(self.outp_cells[idx]) > 0:
+							res[idx] = str(sum(map(float, self.outp_cells[idx])) / len(self.outp_cells[idx]))
+					elif rule.merge_operator == 'median':
+						# TODO
+						continue
+					elif rule.merge_operator == 'list':
+						res[idx] = "[%s]" % "; ".join(self.outp_cells[idx])
+					elif rule.merge_operator == 'sum':
+						res[idx] = str(sum(map(float, self.outp_cells[idx])))
+				except Exception as e:
+					print("Error in merged_by_rules():")
+					print(e)
+					pass
+					
 		return res
 
 	def process_line(self, line_cells):
 		self.line_counter = self.line_counter + 1
-		self.relative_counter = self.relative_counter + 1		
+		self.relative_counter = self.relative_counter + 1	
+		indices = {"{i}":str(self.relative_counter - 1), "{I}":str(self.line_counter - 1)}
 		for idx, rule in enumerate(self.column_rules):
 			try:
 				# conditionally (rule.boolean_expr) accumulate values and apply rule.merge_operator.
 				# using calculate_expr() allows "1", "True" and functions, e.g. '{1}/{2} < 4.5' 
 				# to be evaluated as powerful conditional selections.
-				if calculate_expr(rule.boolean_expr + " == True", line_cells, "False") == "True":
-					self.outp_cells[idx].append(calculate_expr(rule.analytical_expr, line_cells, 'NaN'))
+				if calculate_expr("("+rule.boolean_expr + ") == True", line_cells, "False", indices) == "True":
+					self.outp_cells[idx].append(calculate_expr(rule.analytical_expr, line_cells, 'NaN', indices))
 			except Exception as e:
+				print("Error in process_line():")
 				print(e)
 				# default is 'NaN'
 				pass
@@ -239,6 +250,8 @@ def create_from_cheleiha_static(input_filename, output_filename, columns_config,
 	data_line_index = 0
 	
 	for line in inp:
+		if line.strip() == '':
+			continue
 		if input_is_header:
 			if last_headerline_pattern.match(line):
 				input_is_header = False
