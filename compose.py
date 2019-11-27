@@ -70,7 +70,6 @@ def calculate_expr(fstr, values, default, symbols = {}):
 	for key, val in symbols.items():
 		fstr = fstr.replace(key, val)
 	try:
-		print(fstr)
 		res = str(eval(fstr))
 	except:
 		res = default
@@ -96,7 +95,7 @@ class IterativeTableProcessor():
 		# group1 = arithmetic expression with placeholders | ''
 		# optional group2 = parent group for "when" keyword and match4 | None
 		# optional group3 = boolean expression | None 
-		self.command_pattern = re.compile('^\s*(min|max|average|median|list|sum)?\s*(.*?)(?=when\s*|$)(when\s*(\S.*))?')
+		self.command_pattern = re.compile('^\s*(min|max|stddev|average|median|once|list|sum)?\s*(.*?)(?=when\s*|$)(when\s*(\S.*))?')
 		# examples:
 		# "{4}"
 		#	1:{4}
@@ -134,17 +133,20 @@ class IterativeTableProcessor():
 			for idx, rule in enumerate(self.column_rules):
 				try:
 					# operators listed in self.command_pattern
-					if rule.merge_operator == None:
+					if (rule.merge_operator == None) or (rule.merge_operator == 'once'):
 						# select first item (default)
 						if len(self.outp_cells[idx]) > 0:
 							res[idx] = str(self.outp_cells[idx][0])
-							if self.block_length > 1:
+							if (self.block_length > 1) and not (rule.merge_operator == 'once'):
 								print("Warning: column %d has no explicit selection operator and block length is > 1.")
-								print("Per block, only the first item from each column will be output.")
+								print("Per block, only the first item from each column will be output. Use 'once' if it's deliberate.")
 					if rule.merge_operator == 'min':
 						# TODO
 						continue 
 					elif rule.merge_operator == 'max':
+						# TODO
+						continue
+					elif rule.merge_operator == 'stddev':
 						# TODO
 						continue
 					elif rule.merge_operator == 'average':
@@ -235,9 +237,9 @@ def create_from_cheleiha_static(input_filename, output_filename, columns_config,
 	outp.write('%ssource : "%s"%s\n' % (output_headerline_prefix, os.path.basename(input_filename), output_headerline_suffix))
 	for idx, col_cfg in enumerate(columns_config):
 		if isinstance(col_cfg[0], int):
-			outp.write('%scolumn %d : original column %s (%s)%s\n' % (output_headerline_prefix, idx + 1, col_cfg[0], col_cfg[1], output_headerline_suffix))
+			outp.write('%scolumn %d : original column %s (%s)%s\n' % (output_headerline_prefix, idx + 1,  col_cfg[1], col_cfg[0], output_headerline_suffix))
 		else:
-			outp.write('%scolumn %d : expression %s (%s)%s\n' % (output_headerline_prefix, idx + 1, repr(col_cfg[0]), col_cfg[1], output_headerline_suffix))
+			outp.write('%scolumn %d : (%s) - expression %s%s\n' % (output_headerline_prefix, idx + 1, col_cfg[1], repr(col_cfg[0]), output_headerline_suffix))
 		
 	# import data, process and write output
 	

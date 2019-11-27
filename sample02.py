@@ -28,9 +28,27 @@ print("output: %s" % output_fn)
 #	and in-built functions (see compose.py code).
 
 columns = [
+	("average ({10}-0.5)*40/4.5", "CH7 flow rate L/min"),
+	("average {21}", "I_DUT (A)"),
+	("average {21}*abs({5})", "P_loss (W)"),
+	("average {23}", "Temp T2: fluid at inlet (°C)"),
+	("average {22}", "Temp T1: baseplate at inlet (°C)"),
 	("average {3}", "NTC drive current (A)"),
-	("average {4} when {i} % 2 == 0", "IGBT2 sense (V)"),
-	("average {4} when {i} % 2 == 1", "D2 sense (V)"),
+	("average {11}/{3}", "CH8 R(NTC1@1mA) (Ohm)"),
+	("average {12}/{3}", "CH9 R(NTC2@1mA) (Ohm)"),
+	("average {13}/{3}", "CH10 R(NTC3@1mA) (Ohm)"),
+	("once NaN", "IGBT1 sense voltage (V)"),
+	("average -{5}", "D1 sense voltage (V)"),
+	("average  {4} when {i} % 2 == 0", "IGBT2 sense voltage (V)"),
+	("average -{4} when {i} % 2 == 1", "D2 sense voltage (V)"),
+	("average  {6} when {i} % 2 == 0", "IGBT3 sense voltage (V)"),
+	("average -{6} when {i} % 2 == 1", "D3 sense voltage (V)"),
+	("average  {7} when {i} % 2 == 0", "IGBT4 sense voltage (V)"),
+	("average -{7} when {i} % 2 == 1", "D4 sense voltage (V)"),
+	("average  {8} when {i} % 2 == 0", "IGBT5 sense voltage (V)"),
+	("average -{8} when {i} % 2 == 1", "D5 sense voltage (V)"),
+	("average  {9} when {i} % 2 == 0", "IGBT6 sense voltage (V)"),
+	("average -{9} when {i} % 2 == 1", "D6 sense voltage (V)"),		
 	]
 
 compose.create_from_cheleiha_static(input_fn, output_fn, columns, block_length = 64)
