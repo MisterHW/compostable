@@ -78,7 +78,7 @@ def calculate_expr(fstr, values, default, symbols = {}):
 	
 
 class ExprProcessingRule():
-	def __init__(self, merge_operator, analytical_expr, boolean_expr):
+	def __init__(self, analytical_expr, merge_operator = None, boolean_expr = None):
 		self.merge_operator  = merge_operator
 		self.analytical_expr = analytical_expr
 		self.boolean_expr    = boolean_expr if (boolean_expr != None) else 'True'
@@ -115,10 +115,12 @@ class IterativeTableProcessor():
 		# parse column configuration
 		self.column_rules = []
 		for idx, col_cfg in enumerate(self.column_configurations):
-			m = self.command_pattern.match(str(col_cfg[0]))
-			g = m.groups()
-			self.column_rules.append(ExprProcessingRule(merge_operator = g[0], analytical_expr = g[1], boolean_expr = g[3]))
-			
+			if isinstance(col_cfg[0], int):
+				self.column_rules.append(ExprProcessingRule(analytical_expr = "{%d}" % col_cfg[0]))
+			else:
+				m = self.command_pattern.match(str(col_cfg[0]))
+				g = m.groups()	
+				self.column_rules.append(ExprProcessingRule(analytical_expr = g[1], merge_operator = g[0], boolean_expr = g[3]))				
 		self._clear_output_cells()
 			
 	def _clear_output_cells(self):
@@ -235,6 +237,9 @@ def create_from_cheleiha_static(input_filename, output_filename, columns_config,
 		outp.write('%s\n' % (output_header_first_line))
 
 	outp.write('%ssource : "%s"%s\n' % (output_headerline_prefix, os.path.basename(input_filename), output_headerline_suffix))
+	if block_length > 1:
+		outp.write('%sline block length : %d%s\n' % (output_headerline_prefix, block_length, output_headerline_suffix))
+		
 	for idx, col_cfg in enumerate(columns_config):
 		if isinstance(col_cfg[0], int):
 			outp.write('%scolumn %d : original column %s (%s)%s\n' % (output_headerline_prefix, idx + 1,  col_cfg[1], col_cfg[0], output_headerline_suffix))
